@@ -36,10 +36,10 @@ err_t tcp_server_write_string(struct tcp_pcb *tpcb, char *buffer);
 
 // Command Handlers
 err_t tcp_server_handle_exit(void *arg, struct tcp_pcb *tpcb);
-err_t tcp_server_handle_flash_read(void *arg, struct tcp_pcb *tpcb);
-err_t tcp_server_handle_flash_clear(void *arg, struct tcp_pcb *tpcb);
-err_t tcp_server_handle_flash_write(void *arg, struct tcp_pcb *tpcb, char *buffer, int length);
-err_t tcp_server_handle_unrecognized(void *arg, struct tcp_pcb *tpcb, char *buffer, int length);
+err_t tcp_server_handle_flash_read(struct tcp_pcb *tpcb);
+err_t tcp_server_handle_flash_clear(struct tcp_pcb *tpcb);
+err_t tcp_server_handle_flash_write(struct tcp_pcb *tpcb, char *buffer, int length);
+err_t tcp_server_handle_unrecognized(struct tcp_pcb *tpcb, char *buffer, int length);
 
 // Util
 void buffer_to_hex(const char* src, char* dest, size_t length);

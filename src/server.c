@@ -64,8 +64,6 @@ err_t tcp_server_sent(void *arg, struct tcp_pcb *tpcb, u16_t len) {
 }
 
 err_t tcp_server_handle_response(void *arg, struct tcp_pcb *tpcb, char *buffer, int length) {
-    TCP_SERVER_T *state = (TCP_SERVER_T*)arg;
-
     // Buffer finishes with CRLF, truncate it
     if(length < 2) return ERR_ABRT;
     length = length - 2;
@@ -76,13 +74,13 @@ err_t tcp_server_handle_response(void *arg, struct tcp_pcb *tpcb, char *buffer, 
     if(strcmp(buffer, "exit") == 0) {
         err = tcp_server_handle_exit(arg, tpcb);
     } else if(strcmp(buffer, "wifi read") == 0) {
-        err = tcp_server_handle_flash_read(arg, tpcb);
+        err = tcp_server_handle_flash_read(tpcb);
     } else if(strcmp(buffer, "wifi clear") == 0) {
-        err = tcp_server_handle_flash_clear(arg, tpcb);
+        err = tcp_server_handle_flash_clear(tpcb);
     } else if(strncmp(buffer, "wifi write ", 11) == 0) {
-        err = tcp_server_handle_flash_write(arg, tpcb, buffer, length);
+        err = tcp_server_handle_flash_write(tpcb, buffer, length);
     } else {
-        err = tcp_server_handle_unrecognized(arg, tpcb, buffer, length);
+        err = tcp_server_handle_unrecognized(tpcb, buffer, length);
     }
 
     tcp_server_write_string(tpcb, ">\0");
@@ -96,31 +94,31 @@ err_t tcp_server_handle_exit(void *arg, struct tcp_pcb *tpcb) {
     return ERR_OK;
 }
 
-err_t tcp_server_handle_flash_read(void *arg, struct tcp_pcb *tpcb) {
+err_t tcp_server_handle_flash_read(struct tcp_pcb *tpcb) {
     char ssid[256], pwdbuffer[256], txbuffer[1024];
 
     if(wifi_details_load(ssid, pwdbuffer) == WIFI_DETAILS_UNSET) {
         tcp_server_write_string(tpcb, "Flash Wifi Details: Unset\r\n\0");
     } else {
-        sprintf(&txbuffer, "Flash Wifi Details: SSID %s PWD %s\r\n\0", ssid, pwdbuffer);
+        sprintf((char*)(&txbuffer), "Flash Wifi Details: SSID %s PWD %s\r\n\0", ssid, pwdbuffer);
         tcp_server_write_string(tpcb, txbuffer);
     }
 
     return ERR_OK;
-}
+}  
 
-err_t tcp_server_handle_flash_clear(void *arg, struct tcp_pcb *tpcb) {
+err_t tcp_server_handle_flash_clear(struct tcp_pcb *tpcb) {
     wifi_details_clear();
     tcp_server_write_string(tpcb, "Flash Wifi Details: Unset\r\n\0");
     return ERR_OK;
 }
 
-err_t tcp_server_handle_flash_write(void *arg, struct tcp_pcb *tpcb, char *buffer, int length) {
+err_t tcp_server_handle_flash_write(struct tcp_pcb *tpcb, char *buffer, int length) {
     char ssid[256], pwdbuffer[256];
     sscanf(buffer+12, "\"%[^\"]\" \"%[^\"]\"", ssid, pwdbuffer);
 
     char txbuffer[1024];
-    sprintf(&txbuffer, "Flash Wifi Details: SSID %s PWD %s\r\n\0", ssid, pwdbuffer);
+    sprintf((char*)(&txbuffer), "Flash Wifi Details: SSID %s PWD %s\r\n\0", ssid, pwdbuffer);
 
     wifi_details_save(ssid, pwdbuffer);
     tcp_server_write_string(tpcb, txbuffer);
@@ -128,12 +126,9 @@ err_t tcp_server_handle_flash_write(void *arg, struct tcp_pcb *tpcb, char *buffe
     return ERR_OK;
 }
 
-err_t tcp_server_handle_unrecognized(void *arg, struct tcp_pcb *tpcb, char *buffer, int length) {
-    char hexbuffer[1024];
-    buffer_to_hex(buffer, hexbuffer, length);
-
+err_t tcp_server_handle_unrecognized(struct tcp_pcb *tpcb, char *buffer, int length) {
     char txbuffer[1024];
-    sprintf(&txbuffer, "Unrecognized Command: %s\r\nLength: %d\r\nHex: %s\r\n\0", buffer, length, hexbuffer);
+    sprintf((char*)(&txbuffer), "Unrecognized Command: %s\r\nCurrently available commands: wifi read, wifi write, wifi clear, exit\r\n\0", buffer);
 
     tcp_server_write_string(tpcb, txbuffer);
     return ERR_OK;
@@ -164,7 +159,7 @@ err_t tcp_server_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err
     for (int i = 0; i < state->recv_len - 1; ++i) {
         if (state->buffer_recv[i] == '\r' && state->buffer_recv[i + 1] == '\n') {
             // Call the external handler with the data up to and including CRLF
-            tcp_server_handle_response(arg, tpcb, state->buffer_recv, i + 2);
+            tcp_server_handle_response(arg, tpcb, (char*)(state->buffer_recv), i + 2);
 
             // Move the rest of the buffer to the beginning
             int remaining = state->recv_len - (i + 2);
@@ -235,9 +230,7 @@ bool tcp_server_open(void *arg) {
     state->server_pcb = tcp_listen_with_backlog(pcb, 1);
     if (!state->server_pcb) {
         // DEBUG_printf("failed to listen\n");
-        if (pcb) {
-            tcp_close(pcb);
-        }
+        if (pcb) { tcp_close(pcb); }
         return false;
     }
 

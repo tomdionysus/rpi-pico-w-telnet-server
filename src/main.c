@@ -14,8 +14,7 @@ int main() {
     stdio_init_all();
 
     if (cyw43_arch_init()) {
-        printf("failed to initialise\n");
-        return 1;
+        return -1;
     }
 
     cyw43_arch_enable_sta_mode();
@@ -30,8 +29,8 @@ int main() {
 
     TCP_SERVER_T *state = tcp_server_init();
 
-    if (!state) { return; }
-    if (!tcp_server_open(state)) { return; }
+    if (!state) { return -1; }
+    if (!tcp_server_open(state)) { return -1; }
     while(!state->complete) {
         sleep_ms(1000);
     }
