@@ -6,6 +6,7 @@
 
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
+
 #include "server.h"
 
 int main() {
@@ -25,7 +26,29 @@ int main() {
     } else {
         printf("Connected.\n");
     }
-    run_tcp_server_test();
+
+    TCP_SERVER_T *state = tcp_server_init();
+    
+    if (!state) { return; }
+    if (!tcp_server_open(state)) { return; }
+    while(!state->complete) {
+        // the following #ifdef is only here so this same example can be used in multiple modes;
+        // you do not need it in your code
+#if PICO_CYW43_ARCH_POLL
+        // if you are using pico_cyw43_arch_poll, then you must poll periodically from your
+        // main loop (not from a timer) to check for Wi-Fi driver or lwIP work that needs to be done.
+        cyw43_arch_poll();
+        // you can poll as often as you like, however if you have nothing else to do you can
+        // choose to sleep until either a specified time, or cyw43_arch_poll() has work to do:
+        cyw43_arch_wait_for_work_until(make_timeout_time_ms(1000));
+#else
+        // if you are not using pico_cyw43_arch_poll, then WiFI driver and lwIP work
+        // is done via interrupt in the background. This sleep is just an example of some (blocking)
+        // work you might be doing.
+        sleep_ms(100);
+#endif
+    }
+    free(state);
+
     cyw43_arch_deinit();
-    return 0;
 }
