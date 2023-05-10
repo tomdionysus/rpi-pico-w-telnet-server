@@ -14,6 +14,9 @@
 #include "lwip/tcp.h"
 
 #include "server.h"
+#include "flash_store.h"
+
+#include "hardware/flash.h"
 
 TCP_SERVER_T* tcp_server_init(void) {
     TCP_SERVER_T *state = calloc(1, sizeof(TCP_SERVER_T));
@@ -64,22 +67,75 @@ err_t tcp_server_handle_response(void *arg, struct tcp_pcb *tpcb, char *buffer, 
     TCP_SERVER_T *state = (TCP_SERVER_T*)arg;
 
     // Buffer finishes with CRLF, truncate it
-    if(length<2) return ERR_ABRT;
-    length = length-2;
+    if(length < 2) return ERR_ABRT;
+    length = length - 2;
     buffer[length] = 0;
-        
-    char txbuffer[1024], hexbuffer[1024];
+
+    err_t err;
 
     if(strcmp(buffer, "exit") == 0) {
-        tcp_server_close(arg);
+        err = tcp_server_handle_exit(arg, tpcb);
+    } else if(strcmp(buffer, "wifi read") == 0) {
+        err = tcp_server_handle_flash_read(arg, tpcb);
+    } else if(strcmp(buffer, "wifi clear") == 0) {
+        err = tcp_server_handle_flash_clear(arg, tpcb);
+    } else if(strncmp(buffer, "wifi write ", 11) == 0) {
+        err = tcp_server_handle_flash_write(arg, tpcb, buffer, length);
     } else {
-        buffer_to_hex(buffer, hexbuffer, length);
-        sprintf(&txbuffer, "Unrecognised Command: %s\r\nLength: %d\r\nHex: %s\r\n\0", buffer, length, hexbuffer);
-        tcp_server_write_string(tpcb, txbuffer);
+        err = tcp_server_handle_unrecognized(arg, tpcb, buffer, length);
     }
 
     tcp_server_write_string(tpcb, ">\0");
 
+    return err;
+}
+
+err_t tcp_server_handle_exit(void *arg, struct tcp_pcb *tpcb) {
+    tcp_server_write_string(tpcb, "Disconnecting:\r\n\0");
+    tcp_server_close(arg);
+    return ERR_OK;
+}
+
+err_t tcp_server_handle_flash_read(void *arg, struct tcp_pcb *tpcb) {
+    char ssid[256], pwdbuffer[256], txbuffer[1024];
+
+    if(wifi_details_load(ssid, pwdbuffer) == WIFI_DETAILS_UNSET) {
+        tcp_server_write_string(tpcb, "Flash Wifi Details: Unset\r\n\0");
+    } else {
+        sprintf(&txbuffer, "Flash Wifi Details: SSID %s PWD %s\r\n\0", ssid, pwdbuffer);
+        tcp_server_write_string(tpcb, txbuffer);
+    }
+
+    return ERR_OK;
+}
+
+err_t tcp_server_handle_flash_clear(void *arg, struct tcp_pcb *tpcb) {
+    wifi_details_clear();
+    tcp_server_write_string(tpcb, "Flash Wifi Details: Unset\r\n\0");
+    return ERR_OK;
+}
+
+err_t tcp_server_handle_flash_write(void *arg, struct tcp_pcb *tpcb, char *buffer, int length) {
+    char ssid[256], pwdbuffer[256];
+    sscanf(buffer+12, "\"%[^\"]\" \"%[^\"]\"", ssid, pwdbuffer);
+
+    char txbuffer[1024];
+    sprintf(&txbuffer, "Flash Wifi Details: SSID %s PWD %s\r\n\0", ssid, pwdbuffer);
+
+    wifi_details_save(ssid, pwdbuffer);
+    tcp_server_write_string(tpcb, txbuffer);
+
+    return ERR_OK;
+}
+
+err_t tcp_server_handle_unrecognized(void *arg, struct tcp_pcb *tpcb, char *buffer, int length) {
+    char hexbuffer[1024];
+    buffer_to_hex(buffer, hexbuffer, length);
+
+    char txbuffer[1024];
+    sprintf(&txbuffer, "Unrecognized Command: %s\r\nLength: %d\r\nHex: %s\r\n\0", buffer, length, hexbuffer);
+
+    tcp_server_write_string(tpcb, txbuffer);
     return ERR_OK;
 }
 

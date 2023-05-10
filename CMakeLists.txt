@@ -48,6 +48,7 @@ add_compile_options(-Wall
 add_executable(server
         src/main.c
         src/server.c
+        src/flash_store.c
 )
 target_compile_definitions(server PRIVATE
         WIFI_SSID=\"${WIFI_SSID}\"
